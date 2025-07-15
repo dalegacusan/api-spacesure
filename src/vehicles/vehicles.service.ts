@@ -28,6 +28,7 @@ export class VehiclesService {
       color: dto.color,
       plate_number: dto.plate_number,
       user_id: new ObjectId(userId),
+      is_deleted: false,
     });
 
     const saved = await this.vehicleRepo.save(newVehicle);
@@ -49,7 +50,9 @@ export class VehiclesService {
   async findByUser(userId: string) {
     try {
       const objectId = new ObjectId(userId);
-      return await this.vehicleRepo.find({ where: { user_id: objectId } });
+      return await this.vehicleRepo.find({
+        where: { user_id: objectId, is_deleted: false },
+      });
     } catch {
       return [];
     }
@@ -64,17 +67,12 @@ export class VehiclesService {
     if (vehicle.user_id.toString() !== userId)
       throw new ForbiddenException('User is not authorized to delete vehicle');
 
-    const reservationCount = await this.reservationRepo.count({
-      where: { vehicle_id: new ObjectId(vehicleId) },
+    await this.vehicleRepo.update(vehicle._id, {
+      is_deleted: true,
+      updated_at: new Date(),
     });
 
-    if (reservationCount > 0)
-      throw new ForbiddenException(
-        'Cannot delete vehicle with existing reservations',
-      );
-
-    await this.vehicleRepo.delete(vehicle._id);
-    return { message: 'Vehicle deleted successfully' };
+    return { message: 'Vehicle deleted (soft delete) successfully' };
   }
 
   async updateVehicle(

@@ -17,4 +17,5 @@ export class Vehicle {
   @Column({ unique: true }) plate_number: string;
   @CreateDateColumn() created_at: Date;
   @UpdateDateColumn() updated_at: Date;
+  @Column({ default: false }) is_deleted: boolean;
 }
