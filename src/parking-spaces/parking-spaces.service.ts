@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ObjectId } from 'mongodb';
-import { ParkingSpaceAdmin, User } from 'src/libs/entities';
+import { ParkingSpaceAdmin, Reservation, User } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { UserRole } from 'src/libs/enums/roles.enum';
@@ -17,15 +17,30 @@ export class ParkingSpacesService {
     private readonly parkingSpaceAdminRepo: MongoRepository<ParkingSpaceAdmin>,
     @InjectRepository(User)
     private readonly userRepo: MongoRepository<User>,
+    @InjectRepository(Reservation)
+    private readonly reservationRepo: MongoRepository<Reservation>,
   ) {}
 
-  async getOne(id: string) {
+  async getOne(id: string, userId?: string) {
     const record = await this.parkingSpaceRepo.findOneBy({
       _id: new ObjectId(id),
       is_deleted: false,
     });
 
     if (!record) return null;
+
+    let feedbackEnabled = false;
+
+    if (userId) {
+      const hasReservation = await this.reservationRepo.findOne({
+        where: {
+          parking_space_id: new ObjectId(id),
+          user_id: new ObjectId(userId),
+        },
+      });
+
+      feedbackEnabled = !!hasReservation;
+    }
 
     return {
       _id: record._id,
@@ -44,6 +59,7 @@ export class ParkingSpacesService {
       is_deleted: record.is_deleted,
       created_at: record.created_at,
       updated_at: record.updated_at,
+      feedbackEnabled,
     };
   }
 

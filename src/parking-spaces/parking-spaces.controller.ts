@@ -66,7 +66,7 @@ export class ParkingSpacesController {
       return space;
     }
 
-    const space = await this.parkingService.getOne(id);
+    const space = await this.parkingService.getOne(id, user._id);
     if (!space) {
       throw new NotFoundException('Parking space not found');
     }
