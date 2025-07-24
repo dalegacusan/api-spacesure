@@ -6,6 +6,7 @@ import {
   ObjectIdColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { DiscountLevel } from '../enums/discount-eligiblity.enum';
 import { UserRole } from '../enums/roles.enum';
 import { UserStatus } from '../enums/user-status.enum';
 
@@ -22,6 +23,9 @@ export class User {
   @Column() role: UserRole;
   @Column({ nullable: true }) phone_number?: string;
   @Column() failed_login_attempts: number;
+  @Column({ default: false }) eligible_for_discount: boolean;
+  @Column({ nullable: true }) discount_level?: DiscountLevel | null;
+  @Column({ nullable: true }) discount_id?: string | null;
 
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   account_available_at: Date;

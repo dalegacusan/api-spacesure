@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { User, Vehicle } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
 import { Payment } from 'src/libs/entities/payment.entity';
@@ -26,6 +27,7 @@ export class PaymentsService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    private cryptoService: CryptoService,
   ) {}
 
   /*
@@ -272,6 +274,25 @@ export class PaymentsService {
           where: { _id: reservation.user_id },
         });
 
+        const decryptedUser = user
+          ? {
+              ...user,
+              first_name: user.first_name
+                ? this.cryptoService.decrypt(user.first_name)
+                : null,
+              last_name: user.last_name
+                ? this.cryptoService.decrypt(user.last_name)
+                : null,
+              middle_name: user.middle_name
+                ? this.cryptoService.decrypt(user.middle_name)
+                : null,
+              phone_number: user.phone_number
+                ? this.cryptoService.decrypt(user.phone_number)
+                : null,
+              email: user.email,
+            }
+          : null;
+
         const vehicle = await this.vehicleRepo.findOne({
           where: { _id: reservation.vehicle_id },
         });
@@ -283,7 +304,7 @@ export class PaymentsService {
         return {
           ...payment,
           reservation,
-          user,
+          user: decryptedUser,
           vehicle,
           parking_space,
         };

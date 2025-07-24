@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { ObjectId } from 'mongodb';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { ParkingSpace, Payment } from 'src/libs/entities';
 import { Reservation } from 'src/libs/entities/reservation.entity';
 import { Vehicle } from 'src/libs/entities/vehicle.entity';
@@ -27,6 +28,7 @@ export class ReservationsService {
     private readonly parkingSpaceRepo: Repository<ParkingSpace>,
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
+    private cryptoService: CryptoService,
   ) {}
 
   async getDriverHistory(userId: string) {
@@ -127,7 +129,28 @@ export class ReservationsService {
       } as any,
     });
 
-    const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+    const userMap = new Map(
+      users.map((u) => [
+        u._id.toString(),
+        {
+          ...u,
+          first_name: u.first_name
+            ? this.cryptoService.decrypt(u.first_name)
+            : null,
+          last_name: u.last_name
+            ? this.cryptoService.decrypt(u.last_name)
+            : null,
+          middle_name: u.middle_name
+            ? this.cryptoService.decrypt(u.middle_name)
+            : null,
+          phone_number: u.phone_number
+            ? this.cryptoService.decrypt(u.phone_number)
+            : null,
+          email: u.email,
+        },
+      ]),
+    );
+
     const vehicleMap = new Map(vehicles.map((v) => [v._id.toString(), v]));
     const spaceMap = new Map(parkingSpaces.map((s) => [s._id.toString(), s]));
     const paymentMap = new Map();

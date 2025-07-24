@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import { addMinutes, isBefore } from 'date-fns';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { User } from 'src/libs/entities';
 import { UserRole } from 'src/libs/enums/roles.enum';
 import { UserStatus } from 'src/libs/enums/user-status.enum';
@@ -20,12 +21,11 @@ export class AuthService {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.userRepo.findOne({
-      where: { email: email },
-    });
+    const user = await this.userRepo.findOne({ where: { email } });
 
     // Uniform error for security
     const invalidError = new ForbiddenException('Invalid credentials');
@@ -87,7 +87,18 @@ export class AuthService {
     return {
       message: 'Login successful',
       data: {
-        user: safeUser,
+        user: {
+          ...safeUser,
+          email: safeUser.email,
+          first_name: this.cryptoService.decrypt(safeUser.first_name),
+          last_name: this.cryptoService.decrypt(safeUser.last_name),
+          middle_name: safeUser.middle_name
+            ? this.cryptoService.decrypt(safeUser.middle_name)
+            : null,
+          phone_number: safeUser.phone_number
+            ? this.cryptoService.decrypt(safeUser.phone_number)
+            : null,
+        },
         token,
       },
     };
@@ -101,15 +112,13 @@ export class AuthService {
       throw new BadRequestException('Missing required fields');
     }
 
-    if (dto.password.length < 6) {
+    if (dto.password.length < 12) {
       throw new BadRequestException(
-        'Password must be at least 6 characters long',
+        'Password must be at least 12 characters long',
       );
     }
 
-    const existing = await this.userRepo.findOne({
-      where: { email },
-    });
+    const existing = await this.userRepo.findOne({ where: { email } });
     if (existing) {
       throw new ConflictException('User with this email already exists');
     }
@@ -117,27 +126,43 @@ export class AuthService {
     const hashedPassword = await argon2.hash(dto.password);
 
     const newUser = this.userRepo.create({
-      email,
+      email: dto.email,
       password: hashedPassword,
-      first_name: dto.firstName,
-      last_name: dto.lastName,
-      middle_name: dto.middleName,
-      phone_number: dto.phoneNumber,
+      first_name: this.cryptoService.encrypt(dto.firstName),
+      last_name: this.cryptoService.encrypt(dto.lastName),
+      middle_name: dto.middleName
+        ? this.cryptoService.encrypt(dto.middleName)
+        : null,
+      phone_number: dto.phoneNumber
+        ? this.cryptoService.encrypt(dto.phoneNumber)
+        : null,
       role: dto.role || UserRole.DRIVER,
       created_at: new Date(),
       updated_at: new Date(),
       account_available_at: new Date(),
       failed_login_attempts: 0,
       status: UserStatus.ENABLED,
-    });
+      eligible_for_discount: false,
+    } as Partial<User>);
 
     const savedUser = await this.userRepo.save(newUser);
+    const { password, ...safeUser } = savedUser;
 
-    const { password: passwordToRemove, ...safeUser } = savedUser;
     return {
       message: 'User registered successfully',
       data: {
-        user: safeUser,
+        user: {
+          ...safeUser,
+          email: safeUser.email,
+          first_name: this.cryptoService.decrypt(safeUser.first_name),
+          last_name: this.cryptoService.decrypt(safeUser.last_name),
+          middle_name: safeUser.middle_name
+            ? this.cryptoService.decrypt(safeUser.middle_name)
+            : null,
+          phone_number: safeUser.phone_number
+            ? this.cryptoService.decrypt(safeUser.phone_number)
+            : null,
+        },
       },
     };
   }

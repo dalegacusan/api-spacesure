@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import * as argon2 from 'argon2';
 import { ObjectId } from 'mongodb';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import {
   ParkingSpace,
   ParkingSpaceAdmin,
@@ -37,6 +38,7 @@ export class UsersService {
     private readonly parkingSpaceRepo: Repository<ParkingSpace>,
     @InjectRepository(ParkingSpaceAdmin)
     private readonly parkingSpaceAdminRepo: Repository<ParkingSpaceAdmin>,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async getOneUserWithDetails(id: string) {
@@ -107,6 +109,15 @@ export class UsersService {
 
     return {
       ...safeUser,
+      email: safeUser.email,
+      first_name: this.cryptoService.decrypt(safeUser.first_name),
+      last_name: this.cryptoService.decrypt(safeUser.last_name),
+      middle_name: safeUser.middle_name
+        ? this.cryptoService.decrypt(safeUser.middle_name)
+        : null,
+      phone_number: safeUser.phone_number
+        ? this.cryptoService.decrypt(safeUser.phone_number)
+        : null,
       reservations: reservationsWithDetails,
       assigned_parking_spaces: assignedParkingSpaces,
     };
@@ -137,12 +148,38 @@ export class UsersService {
 
     // Fields allowed to be updated by all roles
     const updatableFields: Partial<User> = {
-      first_name: dto.first_name,
-      middle_name: dto.middle_name,
-      last_name: dto.last_name,
-      email: dto.email,
-      phone_number: dto.phone_number,
+      first_name: dto.first_name
+        ? this.cryptoService.encrypt(dto.first_name)
+        : user.first_name,
+      middle_name: dto.middle_name
+        ? this.cryptoService.encrypt(dto.middle_name)
+        : user.middle_name,
+      last_name: dto.last_name
+        ? this.cryptoService.encrypt(dto.last_name)
+        : user.last_name,
+      email: dto.email ?? user.email,
+      phone_number: dto.phone_number
+        ? this.cryptoService.encrypt(dto.phone_number)
+        : user.phone_number,
     };
+
+    if (dto.discount_level) {
+      updatableFields.discount_level = dto.discount_level;
+      updatableFields.discount_id = dto.discount_id;
+
+      // Accept explicit true
+      if (dto.eligible_for_discount === true) {
+        updatableFields.eligible_for_discount = true;
+      }
+    } else {
+      updatableFields.discount_level = null;
+      updatableFields.discount_id = null;
+
+      // Accept explicit false
+      if (dto.eligible_for_discount === false) {
+        updatableFields.eligible_for_discount = false;
+      }
+    }
 
     // Only SUPER_ADMIN can update role and status
     if (role === UserRole.SUPER_ADMIN) {
@@ -150,17 +187,26 @@ export class UsersService {
       if (dto.status) updatableFields.status = dto.status;
     }
 
-    Object.assign(user, {
-      ...updatableFields,
-      updated_at: new Date(),
-    });
-
+    Object.assign(user, { ...updatableFields, updated_at: new Date() });
     const updated = await this.userRepo.save(user);
     const { password, ...safeUser } = updated;
 
     return {
       message: 'User updated successfully',
-      data: { user: safeUser },
+      data: {
+        user: {
+          ...safeUser,
+          email: safeUser.email,
+          first_name: this.cryptoService.decrypt(safeUser.first_name),
+          last_name: this.cryptoService.decrypt(safeUser.last_name),
+          middle_name: safeUser.middle_name
+            ? this.cryptoService.decrypt(safeUser.middle_name)
+            : null,
+          phone_number: safeUser.phone_number
+            ? this.cryptoService.decrypt(safeUser.phone_number)
+            : null,
+        },
+      },
     };
   }
 
@@ -211,6 +257,15 @@ export class UsersService {
 
         return {
           ...safeUser,
+          email: safeUser.email,
+          first_name: this.cryptoService.decrypt(safeUser.first_name),
+          last_name: this.cryptoService.decrypt(safeUser.last_name),
+          middle_name: safeUser.middle_name
+            ? this.cryptoService.decrypt(safeUser.middle_name)
+            : null,
+          phone_number: safeUser.phone_number
+            ? this.cryptoService.decrypt(safeUser.phone_number)
+            : null,
           reservations: reservationsWithDetails,
         };
       }),
@@ -297,15 +352,13 @@ export class UsersService {
       throw new BadRequestException('Missing required fields');
     }
 
-    if (dto.password.length < 6) {
+    if (dto.password.length < 12) {
       throw new BadRequestException(
-        'Password must be at least 6 characters long',
+        'Password must be at least 12 characters long',
       );
     }
 
-    const existing = await this.userRepo.findOne({
-      where: { email },
-    });
+    const existing = await this.userRepo.findOne({ where: { email } });
 
     if (existing) {
       throw new ConflictException('User with this email already exists');
@@ -320,19 +373,29 @@ export class UsersService {
     }
 
     const newUser = this.userRepo.create({
-      email,
+      email: dto.email,
       password: hashedPassword,
-      first_name: dto.firstName,
-      middle_name: dto.middleName,
-      last_name: dto.lastName,
-      phone_number: dto.phoneNumber,
+      first_name: this.cryptoService.encrypt(dto.firstName),
+      last_name: this.cryptoService.encrypt(dto.lastName),
+      middle_name: dto.middleName
+        ? this.cryptoService.encrypt(dto.middleName)
+        : null,
+      phone_number: dto.phoneNumber
+        ? this.cryptoService.encrypt(dto.phoneNumber)
+        : null,
       role: dto.role,
       created_at: new Date(),
       updated_at: new Date(),
       account_available_at: new Date(),
       failed_login_attempts: 0,
       status: UserStatus.ENABLED,
-    });
+      eligible_for_discount: false,
+    } as Partial<User>);
+
+    if (dto.discount_level) {
+      newUser.discount_level = dto.discount_level;
+      newUser.discount_id = dto.discount_id;
+    }
 
     const savedUser = await this.userRepo.save(newUser);
 
@@ -358,7 +421,18 @@ export class UsersService {
     return {
       message: 'User created successfully',
       data: {
-        user: safeUser,
+        user: {
+          ...safeUser,
+          email: safeUser.email,
+          first_name: this.cryptoService.decrypt(safeUser.first_name),
+          last_name: this.cryptoService.decrypt(safeUser.last_name),
+          middle_name: safeUser.middle_name
+            ? this.cryptoService.decrypt(safeUser.middle_name)
+            : null,
+          phone_number: safeUser.phone_number
+            ? this.cryptoService.decrypt(safeUser.phone_number)
+            : null,
+        },
       },
     };
   }

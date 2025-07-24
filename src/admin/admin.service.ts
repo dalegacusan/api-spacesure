@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import {
   ParkingSpace,
   Payment,
@@ -23,6 +24,7 @@ export class AdminService {
     private readonly paymentRepo: MongoRepository<Payment>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: MongoRepository<Vehicle>,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async getDashboardSummary() {
@@ -58,7 +60,6 @@ export class AdminService {
       take: 5,
     });
 
-    // Load related vehicle and parking space for each reservation
     const reservations_with_relations = await Promise.all(
       recent_reservations.map(async (r) => {
         const vehicle = r.vehicle_id
@@ -85,20 +86,24 @@ export class AdminService {
       }),
     );
 
+    const decrypted_users = recent_users.map((u) => ({
+      _id: u._id,
+      first_name: u.first_name
+        ? this.cryptoService.decrypt(u.first_name)
+        : null,
+      last_name: u.last_name ? this.cryptoService.decrypt(u.last_name) : null,
+      email: u.email,
+      role: u.role,
+      created_at: u.created_at,
+    }));
+
     return {
       total_users,
       total_establishments,
       total_reservations,
       total_revenue,
       recent_reservations: reservations_with_relations,
-      recent_users: recent_users.map((u) => ({
-        _id: u._id,
-        first_name: u.first_name,
-        last_name: u.last_name,
-        email: u.email,
-        role: u.role,
-        created_at: u.created_at,
-      })),
+      recent_users: decrypted_users,
       parking_spaces: parking_spaces.map((p) => ({
         _id: p._id,
         establishment_name: p.establishment_name,

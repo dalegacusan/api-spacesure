@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CryptoModule } from 'src/libs/crypto/crypto.module';
 import {
   ParkingSpace,
   ParkingSpaceAdmin,
@@ -17,6 +18,7 @@ import { ParkingSpacesService } from './parking-spaces.service';
       ParkingSpaceAdmin,
       Reservation,
     ]),
+    CryptoModule,
   ],
   providers: [ParkingSpacesService],
   controllers: [ParkingSpacesController],

@@ -7,13 +7,14 @@ import {
   IsPhoneNumber,
   MinLength,
 } from 'class-validator';
+import { DiscountLevel } from 'src/libs/enums/discount-eligiblity.enum';
 import { UserRole } from 'src/libs/enums/roles.enum';
 
 export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @MinLength(6)
+  @MinLength(12)
   password: string;
 
   @IsNotEmpty()
@@ -34,4 +35,11 @@ export class CreateUserDto {
 
   @IsArray()
   assignedParkingSpaceIds?: string[]; // Add this
+
+  @IsOptional()
+  @IsEnum(DiscountLevel)
+  discount_level?: DiscountLevel;
+
+  @IsOptional()
+  discount_id?: string;
 }

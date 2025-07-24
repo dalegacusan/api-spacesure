@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ObjectId } from 'mongodb';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { ParkingSpaceAdmin, Reservation, User } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
@@ -19,6 +20,7 @@ export class ParkingSpacesService {
     private readonly userRepo: MongoRepository<User>,
     @InjectRepository(Reservation)
     private readonly reservationRepo: MongoRepository<Reservation>,
+    private cryptoService: CryptoService,
   ) {}
 
   async getOne(id: string, userId?: string) {
@@ -132,6 +134,30 @@ export class ParkingSpacesService {
     const [lot] = await this.parkingSpaceRepo.aggregate(pipeline).toArray();
     if (!lot) return null;
 
+    // Decrypt user fields
+    const decryptedReservations = lot.reservations?.map((res) => {
+      const user = res.user || {};
+      return {
+        ...res,
+        user: {
+          ...user,
+          first_name: user.first_name
+            ? this.cryptoService.decrypt(user.first_name)
+            : null,
+          last_name: user.last_name
+            ? this.cryptoService.decrypt(user.last_name)
+            : null,
+          middle_name: user.middle_name
+            ? this.cryptoService.decrypt(user.middle_name)
+            : null,
+          phone_number: user.phone_number
+            ? this.cryptoService.decrypt(user.phone_number)
+            : null,
+          email: user.email,
+        },
+      };
+    });
+
     const allPayments = (lot.reservations ?? []).flatMap(
       (r) => r.payments || [],
     );
@@ -143,13 +169,11 @@ export class ParkingSpacesService {
       (sum, p) => sum + p.amount,
       0,
     );
-
     const totalReservations = lot.reservations?.length || 0;
 
     const averageOccupancy =
       ((lot.total_spaces - lot.available_spaces) / lot.total_spaces) * 100;
 
-    // Compute average peak hour (most common hour)
     const hourFrequency: Record<number, number> = {};
     for (const res of lot.reservations ?? []) {
       const hour = new Date(res.start_time).getHours();
@@ -160,13 +184,9 @@ export class ParkingSpacesService {
     const mostFrequentHour = Object.entries(hourFrequency).sort(
       (a, b) => b[1] - a[1],
     )[0];
-
     if (mostFrequentHour) {
       const hour = parseInt(mostFrequentHour[0], 10);
-      const formattedHour = `${hour % 12 === 0 ? 12 : hour % 12}:00 ${
-        hour >= 12 ? 'PM' : 'AM'
-      }`;
-      peakHour = formattedHour;
+      peakHour = `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour >= 12 ? 'PM' : 'AM'}`;
     }
 
     return {
@@ -183,7 +203,7 @@ export class ParkingSpacesService {
         lot.available_spaces,
         lot.total_spaces,
       ),
-      reservations: lot.reservations ?? [],
+      reservations: decryptedReservations,
       is_deleted: lot.is_deleted,
       created_at: lot.created_at,
       updated_at: lot.updated_at,

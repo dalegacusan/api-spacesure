@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ObjectId } from 'mongodb';
+import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { Feedback, User } from 'src/libs/entities';
 import { Repository } from 'typeorm';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
@@ -12,6 +13,7 @@ export class FeedbacksService {
     private readonly feedbackRepository: Repository<Feedback>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly cryptoService: CryptoService,
   ) {}
 
   async createFeedback(dto: CreateFeedbackDto): Promise<Feedback> {
@@ -39,9 +41,28 @@ export class FeedbacksService {
           where: { _id: feedback.user_id },
         });
 
+        const decryptedUser = user
+          ? {
+              _id: user._id,
+              first_name: user.first_name
+                ? this.cryptoService.decrypt(user.first_name)
+                : null,
+              last_name: user.last_name
+                ? this.cryptoService.decrypt(user.last_name)
+                : null,
+              middle_name: user.middle_name
+                ? this.cryptoService.decrypt(user.middle_name)
+                : null,
+              phone_number: user.phone_number
+                ? this.cryptoService.decrypt(user.phone_number)
+                : null,
+              email: user.email,
+            }
+          : null;
+
         return {
           ...feedback,
-          user,
+          user: decryptedUser,
         };
       }),
     );
