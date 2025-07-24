@@ -161,8 +161,6 @@ export class ReservationsService {
       start.getDate(),
     );
 
-    console.log(startDate, startDate.getTime(), today, today.getTime());
-
     if (startDate.getTime() < today.getTime()) {
       throw new BadRequestException('Reservation date cannot be in the past.');
     }
