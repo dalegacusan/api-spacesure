@@ -14,7 +14,11 @@ import { Vehicle } from 'src/libs/entities/vehicle.entity';
 import { AvailabilityStatus } from 'src/libs/enums/availability-status.enum';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { ReservationStatus } from 'src/libs/enums/reservation-status.enum';
-import { getAllDatesBetween } from 'src/libs/utils/date.utils';
+import {
+  formatDateToLong,
+  formatUtcTo12HourTime,
+  getAllDatesBetween,
+} from 'src/libs/utils/date.utils';
 import { Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
@@ -76,23 +80,24 @@ export class ReservationsService {
       const durationMs = end.getTime() - start.getTime();
       const hours = Math.round(durationMs / (1000 * 60 * 60));
 
-      const formatTime = (date: Date) =>
-        date.toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-
       const timeLabel =
         r.reservation_type === 'whole_day'
           ? '12:00 AM - 11:59 PM'
-          : `${formatTime(start)} - ${formatTime(end)}`;
+          : `${formatUtcTo12HourTime(r.start_time.toString())} - ${formatUtcTo12HourTime(r.end_time.toString())}`;
+
+      const startDate = start.toISOString().split('T')[0];
+      const endDate = end.toISOString().split('T')[0];
+
+      let finalDate =
+        startDate === endDate
+          ? formatDateToLong(startDate)
+          : `${formatDateToLong(startDate)} to ${formatDateToLong(endDate)}`;
 
       return {
         id: r._id.toString(),
         establishment: spaceMap.get(r.parking_space_id.toString()) || 'Unknown',
         vehicle: vehicleMap.get(r.vehicle_id.toString()) || null,
-        date: start.toISOString().split('T')[0],
-        // TODO - Fix time displayed on frontend when hourly (whats displayed is not accurate)
+        date: finalDate,
         time: timeLabel,
         duration: `${hours} hour${hours !== 1 ? 's' : ''}`,
         amount: `₱${r.total_price.toFixed(2)}`,
