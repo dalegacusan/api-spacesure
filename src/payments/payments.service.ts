@@ -6,12 +6,13 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { CryptoService } from 'src/libs/crypto/crypto.service';
-import { User, Vehicle } from 'src/libs/entities';
+import { ReservedSlot, User, Vehicle } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
 import { Payment } from 'src/libs/entities/payment.entity';
 import { Reservation } from 'src/libs/entities/reservation.entity';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { ReservationStatus } from 'src/libs/enums/reservation-status.enum';
+import { getAllDatesBetween } from 'src/libs/utils/date.utils';
 import { Repository } from 'typeorm';
 
 @Injectable()
@@ -27,6 +28,8 @@ export class PaymentsService {
     private readonly userRepo: Repository<User>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
+    @InjectRepository(ReservedSlot)
+    private readonly reservedSlotRepo: Repository<ReservedSlot>,
     private cryptoService: CryptoService,
   ) {}
 
@@ -200,6 +203,14 @@ export class PaymentsService {
       throw new NotFoundException('Reservation not found');
     }
 
+    const parkingSpace = await this.parkingSpaceRepo.findOne({
+      where: { _id: reservation.parking_space_id },
+    });
+
+    if (!parkingSpace) {
+      throw new NotFoundException('Parking space not found');
+    }
+
     if (cancel) {
       payment.payment_status = PaymentStatus.FAILED;
       payment.payment_date = new Date();
@@ -227,17 +238,46 @@ export class PaymentsService {
       reservation.status = ReservationStatus.PAID;
       await this.reservationRepo.save(reservation);
 
-      // Deduct from available_spaces
-      const parkingSpace = await this.parkingSpaceRepo.findOne({
-        where: { _id: reservation.parking_space_id },
-      });
+      const start = new Date(reservation.start_time);
+      const end = new Date(reservation.end_time);
 
-      if (parkingSpace) {
-        parkingSpace.available_spaces = Math.max(
-          parkingSpace.available_spaces - 1,
-          0,
-        );
-        await this.parkingSpaceRepo.save(parkingSpace);
+      const dates = getAllDatesBetween(start.toISOString(), end.toISOString());
+
+      for (const date of dates) {
+        let slot = await this.reservedSlotRepo.findOne({
+          where: {
+            parking_space_id: parkingSpace._id,
+            date,
+          },
+        });
+
+        if (!slot) {
+          slot = this.reservedSlotRepo.create({
+            parking_space_id: parkingSpace._id,
+            date,
+            reserved_count: 0,
+          });
+        }
+
+        /*
+
+        Even though you already check available slot count during reservation creation, there is a race condition window:
+
+        Multiple users can create reservations for the same date before paying.
+
+        Only the first few who complete payment should consume capacity.
+
+        Others should be rejected once capacity is exceeded.
+
+      */
+        if (slot.reserved_count >= parkingSpace.available_spaces) {
+          throw new BadRequestException(
+            `Slot on ${date} already fully reserved before payment was confirmed.`,
+          );
+        }
+
+        slot.reserved_count++;
+        await this.reservedSlotRepo.save(slot);
       }
     }
 

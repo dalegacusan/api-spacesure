@@ -5,6 +5,7 @@ import {
   ParkingSpace,
   Payment,
   Reservation,
+  ReservedSlot,
   User,
   Vehicle,
 } from 'src/libs/entities';
@@ -19,6 +20,7 @@ import { PaymentsService } from './payments.service';
       ParkingSpace,
       User,
       Vehicle,
+      ReservedSlot,
     ]),
     CryptoModule,
   ],
