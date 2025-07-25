@@ -219,18 +219,26 @@ export class ReservationsService {
       );
     }
 
-    //  Overlapping check: same vehicle, same parking space, overlapping time
-    const overlappingReservation = await this.reservationRepo.findOne({
+    // Step 1: Fetch all reservations by user, vehicle, and parking space
+    const potentialOverlaps = await this.reservationRepo.find({
       where: {
         user_id: new ObjectId(userId),
         vehicle_id: new ObjectId(dto.vehicle_id),
         parking_space_id: new ObjectId(dto.parking_space_id),
-        start_time: { $lt: new Date(dto.end_time) },
-        end_time: { $gt: new Date(dto.start_time) },
       },
     });
 
-    if (overlappingReservation) {
+    // Step 2: Manually check for time overlap
+    const newStart = new Date(dto.start_time);
+    const newEnd = new Date(dto.end_time);
+
+    const hasOverlap = potentialOverlaps.some((existing) => {
+      const existingStart = new Date(existing.start_time);
+      const existingEnd = new Date(existing.end_time);
+      return existingStart < newEnd && existingEnd > newStart;
+    });
+
+    if (hasOverlap) {
       throw new BadRequestException(
         'This vehicle already has a reservation in this parking space that overlaps with the selected time.',
       );
