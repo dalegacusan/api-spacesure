@@ -300,6 +300,13 @@ export class PaymentsService {
   async getAllWithReservations() {
     const payments = await this.paymentRepo.find();
 
+    // Sort by latest payment_date first (descending)
+    payments.sort((a, b) => {
+      const dateA = new Date(a.payment_date).getTime();
+      const dateB = new Date(b.payment_date).getTime();
+      return dateB - dateA;
+    });
+
     const enriched = await Promise.all(
       payments.map(async (payment) => {
         const reservation = await this.reservationRepo.findOne({
