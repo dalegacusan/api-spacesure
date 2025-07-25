@@ -163,22 +163,36 @@ export class UsersService {
         : user.phone_number,
     };
 
-    if (dto.discount_level) {
-      updatableFields.discount_level = dto.discount_level;
-      updatableFields.discount_id = dto.discount_id;
+    // Track if any discount fields were provided
+    const isDiscountLevelProvided = dto.discount_level !== undefined;
+    const isDiscountIdProvided = dto.discount_id !== undefined;
+    const isEligibilityProvided = dto.eligible_for_discount !== undefined;
 
-      // Accept explicit true
-      if (dto.eligible_for_discount === true) {
-        updatableFields.eligible_for_discount = true;
-      }
-    } else {
+    const hasChangedDiscountLevel =
+      isDiscountLevelProvided && dto.discount_level !== user.discount_level;
+
+    const hasChangedDiscountId =
+      isDiscountIdProvided && dto.discount_id !== user.discount_id;
+
+    // Case 1: If discount info changed (ID or level), reset eligibility to false
+    if (hasChangedDiscountLevel || hasChangedDiscountId) {
+      updatableFields.discount_level = dto.discount_level ?? null;
+      updatableFields.discount_id = dto.discount_id ?? null;
+      updatableFields.eligible_for_discount = false;
+    }
+    // Case 2: If no discount info was submitted at all (cleared), reset all
+    else if (
+      !isDiscountLevelProvided &&
+      !isDiscountIdProvided &&
+      !isEligibilityProvided
+    ) {
       updatableFields.discount_level = null;
       updatableFields.discount_id = null;
-
-      // Accept explicit false
-      if (dto.eligible_for_discount === false) {
-        updatableFields.eligible_for_discount = false;
-      }
+      updatableFields.eligible_for_discount = false;
+    }
+    // Case 3: If eligibility toggle was explicitly changed (e.g., approve/decline)
+    else if (isEligibilityProvided) {
+      updatableFields.eligible_for_discount = dto.eligible_for_discount;
     }
 
     // Only SUPER_ADMIN can update role and status
