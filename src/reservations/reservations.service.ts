@@ -389,32 +389,28 @@ export class ReservationsService {
       throw new NotFoundException('Related parking space not found.');
     }
 
-    try {
-      const dates = getAllDatesBetween(
-        new Date(reservation.start_time).toISOString(),
-        new Date(reservation.end_time).toISOString(),
-      );
+    const dates = getAllDatesBetween(
+      new Date(reservation.start_time).toISOString(),
+      new Date(reservation.end_time).toISOString(),
+    );
 
-      for (const date of dates) {
-        const reservedSlot = await this.reservedSlotRepo.findOne({
-          where: {
-            parking_space_id: parkingSpace._id,
-            date,
-          },
-        });
+    for (const date of dates) {
+      const reservedSlot = await this.reservedSlotRepo.findOne({
+        where: {
+          parking_space_id: parkingSpace._id,
+          date,
+        },
+      });
 
-        if (reservedSlot && reservedSlot.reserved_count > 0) {
-          reservedSlot.reserved_count--;
-          await this.reservedSlotRepo.save(reservedSlot);
-        }
+      if (reservedSlot && reservedSlot.reserved_count > 0) {
+        reservedSlot.reserved_count--;
+        await this.reservedSlotRepo.save(reservedSlot);
       }
-
-      reservation.status = ReservationStatus.COMPLETED;
-      reservation.updated_at = new Date();
-      await this.reservationRepo.save(reservation);
-    } catch (err) {
-      console.log(err);
     }
+
+    reservation.status = ReservationStatus.COMPLETED;
+    reservation.updated_at = new Date();
+    await this.reservationRepo.save(reservation);
 
     return {
       message: 'Reservation marked as completed.',
