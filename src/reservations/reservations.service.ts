@@ -19,14 +19,14 @@ import {
   formatUtcTo12HourTime,
   getAllDatesBetween,
 } from 'src/libs/utils/date.utils';
-import { Repository } from 'typeorm';
+import { MongoRepository, Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Injectable()
 export class ReservationsService {
   constructor(
     @InjectRepository(Reservation)
-    private readonly reservationRepo: Repository<Reservation>,
+    private readonly reservationRepo: MongoRepository<Reservation>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepo: Repository<Vehicle>,
     @InjectRepository(ParkingSpace)
@@ -196,7 +196,6 @@ export class ReservationsService {
       start.getMonth(),
       start.getDate(),
     );
-
     if (startDate.getTime() < today.getTime()) {
       throw new BadRequestException('Reservation date cannot be in the past.');
     }
@@ -205,7 +204,6 @@ export class ReservationsService {
       throw new BadRequestException('End time must be after start time.');
     }
 
-    // Validate parking space availability
     const parkingSpace = await this.parkingSpaceRepo.findOneBy({
       _id: new ObjectId(dto.parking_space_id),
       is_deleted: false,
@@ -221,10 +219,26 @@ export class ReservationsService {
       );
     }
 
+    //  Overlapping check: same vehicle, same parking space, overlapping time
+    const overlappingReservation = await this.reservationRepo.findOne({
+      where: {
+        user_id: new ObjectId(userId),
+        vehicle_id: new ObjectId(dto.vehicle_id),
+        parking_space_id: new ObjectId(dto.parking_space_id),
+        start_time: { $lt: new Date(dto.end_time) },
+        end_time: { $gt: new Date(dto.start_time) },
+      },
+    });
+
+    if (overlappingReservation) {
+      throw new BadRequestException(
+        'This vehicle already has a reservation in this parking space that overlaps with the selected time.',
+      );
+    }
+
     const dates = getAllDatesBetween(dto.start_time, dto.end_time);
     const maxCapacity = parkingSpace.available_spaces;
 
-    // Check capacity for each day
     for (const date of dates) {
       const reservedSlot = await this.reservedSlotRepo.findOne({
         where: {
@@ -252,7 +266,6 @@ export class ReservationsService {
     const savedReservation = await this.reservationRepo.save(newReservation);
 
     const referenceNumber = savedReservation._id.toString();
-
     const newPayment = this.paymentRepo.create({
       reservation_id: savedReservation._id,
       payment_method: 'paymaya',
