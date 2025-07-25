@@ -49,4 +49,10 @@ export class ReservationsController {
   async completeReservation(@Param('id') id: string) {
     return this.reservationsService.completeReservation(id);
   }
+
+  @Get(':parkingSpaceId/reserved-slots')
+  @Roles(UserRole.DRIVER)
+  async getByParkingSpaceId(@Param('parkingSpaceId') id: string) {
+    return this.reservationsService.getByParkingSpaceId(id);
+  }
 }

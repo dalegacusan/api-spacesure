@@ -18,7 +18,8 @@ export class ParkingSpace {
   @Column() available_spaces: number;
   @Column('decimal') hourlyRate: number;
   @Column('decimal') whole_day_rate: number;
-  @Column({ default: AvailabilityStatus.OPEN }) availability_status: string;
+  @Column({ default: AvailabilityStatus.OPEN })
+  availability_status: AvailabilityStatus;
   @Column({ default: false }) is_deleted: boolean;
   @CreateDateColumn() created_at: Date;
   @UpdateDateColumn() updated_at: Date;

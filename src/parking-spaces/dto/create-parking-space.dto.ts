@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsString, Min } from 'class-validator';
+import { AvailabilityStatus } from 'src/libs/enums/availability-status.enum';
 
 export class CreateParkingSpaceDto {
   @IsString()
@@ -29,7 +30,7 @@ export class CreateParkingSpaceDto {
   @Min(0)
   whole_day_rate: number;
 
-  @IsString()
+  @IsEnum(AvailabilityStatus)
   @IsNotEmpty()
-  availability_status: string;
+  availability_status: AvailabilityStatus;
 }

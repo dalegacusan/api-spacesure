@@ -19,7 +19,6 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ParkingSpacesModule } from './parking-spaces/parking-spaces.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ReservationsModule } from './reservations/reservations.module';
-import { SeedModule } from './seed/seed.module';
 import { UsersModule } from './users/users.module';
 import { VehiclesModule } from './vehicles/vehicles.module';
 
@@ -52,7 +51,6 @@ import { VehiclesModule } from './vehicles/vehicles.module';
     ReservationsModule,
     UsersModule,
     VehiclesModule,
-    SeedModule,
     AdminModule,
   ],
 })

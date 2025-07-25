@@ -5,5 +5,6 @@ export * from './parking-space-admin.entity';
 export * from './parking-space.entity';
 export * from './payment.entity';
 export * from './reservation.entity';
+export * from './reserved-slot.entity';
 export * from './user.entity';
 export * from './vehicle.entity';

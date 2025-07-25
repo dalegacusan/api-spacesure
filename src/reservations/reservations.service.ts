@@ -8,13 +8,18 @@ import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { ObjectId } from 'mongodb';
 import { CryptoService } from 'src/libs/crypto/crypto.service';
-import { ParkingSpace, Payment } from 'src/libs/entities';
+import { ParkingSpace, Payment, ReservedSlot } from 'src/libs/entities';
 import { Reservation } from 'src/libs/entities/reservation.entity';
 import { Vehicle } from 'src/libs/entities/vehicle.entity';
 import { AvailabilityStatus } from 'src/libs/enums/availability-status.enum';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { ReservationStatus } from 'src/libs/enums/reservation-status.enum';
-import { In, Repository } from 'typeorm';
+import {
+  formatDateToLong,
+  formatUtcTo12HourTime,
+  getAllDatesBetween,
+} from 'src/libs/utils/date.utils';
+import { Repository } from 'typeorm';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 
 @Injectable()
@@ -28,6 +33,8 @@ export class ReservationsService {
     private readonly parkingSpaceRepo: Repository<ParkingSpace>,
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
+    @InjectRepository(ReservedSlot)
+    private readonly reservedSlotRepo: Repository<ReservedSlot>,
     private cryptoService: CryptoService,
   ) {}
 
@@ -73,18 +80,25 @@ export class ReservationsService {
       const durationMs = end.getTime() - start.getTime();
       const hours = Math.round(durationMs / (1000 * 60 * 60));
 
-      const formatTime = (date: Date) =>
-        date.toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
+      const timeLabel =
+        r.reservation_type === 'whole_day'
+          ? '12:00 AM - 11:59 PM'
+          : `${formatUtcTo12HourTime(r.start_time.toString())} - ${formatUtcTo12HourTime(r.end_time.toString())}`;
+
+      const startDate = start.toISOString().split('T')[0];
+      const endDate = end.toISOString().split('T')[0];
+
+      let finalDate =
+        startDate === endDate
+          ? formatDateToLong(startDate)
+          : `${formatDateToLong(startDate)} to ${formatDateToLong(endDate)}`;
 
       return {
         id: r._id.toString(),
         establishment: spaceMap.get(r.parking_space_id.toString()) || 'Unknown',
         vehicle: vehicleMap.get(r.vehicle_id.toString()) || null,
-        date: start.toISOString().split('T')[0],
-        time: `${formatTime(start)} - ${formatTime(end)}`,
+        date: finalDate,
+        time: timeLabel,
         duration: `${hours} hour${hours !== 1 ? 's' : ''}`,
         amount: `₱${r.total_price.toFixed(2)}`,
         status: r.status,
@@ -174,7 +188,6 @@ export class ReservationsService {
     const start = new Date(dto.start_time);
     const end = new Date(dto.end_time);
 
-    // TODO - FIX must not be less than current datetime
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -192,16 +205,6 @@ export class ReservationsService {
       throw new BadRequestException('End time must be after start time.');
     }
 
-    // COMPLETED and CANCELLED reservation status means no more reservations
-    const existingActiveReservation = await this.reservationRepo.findOneBy({
-      user_id: new ObjectId(userId),
-      status: In([ReservationStatus.PAID]),
-    });
-
-    if (existingActiveReservation) {
-      throw new BadRequestException('You already have an active reservation.');
-    }
-
     // Validate parking space availability
     const parkingSpace = await this.parkingSpaceRepo.findOneBy({
       _id: new ObjectId(dto.parking_space_id),
@@ -212,13 +215,28 @@ export class ReservationsService {
       throw new NotFoundException('Parking space not found.');
     }
 
-    if (
-      parkingSpace.availability_status === AvailabilityStatus.CLOSED ||
-      parkingSpace.available_spaces <= 0
-    ) {
+    if (parkingSpace.availability_status === AvailabilityStatus.CLOSED) {
       throw new BadRequestException(
-        'This parking space cannot be reserved at the moment.',
+        'This parking space is currently closed for reservation.',
       );
+    }
+
+    const dates = getAllDatesBetween(dto.start_time, dto.end_time);
+    const maxCapacity = parkingSpace.available_spaces;
+
+    // Check capacity for each day
+    for (const date of dates) {
+      const reservedSlot = await this.reservedSlotRepo.findOne({
+        where: {
+          parking_space_id: parkingSpace._id,
+          date,
+        },
+      });
+
+      const currentReserved = reservedSlot?.reserved_count || 0;
+      if (currentReserved >= maxCapacity) {
+        throw new BadRequestException(`No available slots left on ${date}.`);
+      }
     }
 
     const newReservation = this.reservationRepo.create({
@@ -350,21 +368,50 @@ export class ReservationsService {
       throw new NotFoundException('Related parking space not found.');
     }
 
+    const dates = getAllDatesBetween(
+      reservation.start_time.toISOString(),
+      reservation.end_time.toISOString(),
+    );
+
+    for (const date of dates) {
+      const reservedSlot = await this.reservedSlotRepo.findOne({
+        where: {
+          parking_space_id: parkingSpace._id,
+          date,
+        },
+      });
+
+      if (reservedSlot && reservedSlot.reserved_count > 0) {
+        reservedSlot.reserved_count--;
+        await this.reservedSlotRepo.save(reservedSlot);
+      }
+    }
+
     reservation.status = ReservationStatus.COMPLETED;
     reservation.updated_at = new Date();
     await this.reservationRepo.save(reservation);
-
-    // Increment available_spaces (but not beyond total_spaces)
-    parkingSpace.available_spaces = Math.min(
-      parkingSpace.total_spaces,
-      parkingSpace.available_spaces + 1,
-    );
-    await this.parkingSpaceRepo.save(parkingSpace);
 
     return {
       message: 'Reservation marked as completed.',
       reservationId: reservation._id.toString(),
       updated_at: reservation.updated_at,
     };
+  }
+
+  async getByParkingSpaceId(parkingSpaceId: string) {
+    if (!ObjectId.isValid(parkingSpaceId)) {
+      throw new NotFoundException('Invalid parking space ID.');
+    }
+
+    const slots = await this.reservedSlotRepo.find({
+      where: {
+        parking_space_id: new ObjectId(parkingSpaceId),
+      },
+      order: {
+        date: 'ASC',
+      },
+    });
+
+    return slots;
   }
 }
