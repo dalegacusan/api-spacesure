@@ -440,4 +440,31 @@ export class ReservationsService {
 
     return slots;
   }
+
+  async markCarIn(reservationId: string) {
+    const reservation = await this.reservationRepo.findOneBy({
+      _id: new ObjectId(reservationId),
+    });
+
+    if (!reservation) {
+      throw new NotFoundException('Reservation not found.');
+    }
+
+    // Only allow marking CAR_IN from PAID status
+    if (reservation.status !== ReservationStatus.PAID) {
+      throw new BadRequestException(
+        'Only PAID reservations can be marked as CAR_IN.',
+      );
+    }
+
+    reservation.status = ReservationStatus.CAR_IN;
+    reservation.updated_at = new Date();
+    await this.reservationRepo.save(reservation);
+
+    return {
+      message: 'Reservation marked as CAR_IN.',
+      reservationId: reservation._id.toString(),
+      updated_at: reservation.updated_at,
+    };
+  }
 }

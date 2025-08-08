@@ -1,6 +1,7 @@
 export enum ReservationStatus {
   CREATED = 'CREATED',
   PAID = 'PAID',
+  CAR_IN = 'CAR_IN',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
   PAYMENT_FAILED = 'PAYMENT_FAILED',

@@ -55,4 +55,10 @@ export class ReservationsController {
   async getByParkingSpaceId(@Param('parkingSpaceId') id: string) {
     return this.reservationsService.getByParkingSpaceId(id);
   }
+
+  @Patch(':id/car-in')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  async markCarIn(@Param('id') id: string) {
+    return this.reservationsService.markCarIn(id);
+  }
 }
