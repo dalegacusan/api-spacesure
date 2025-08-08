@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
+import { ObjectId } from 'mongodb';
 import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { ReservedSlot, User, Vehicle } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
@@ -14,6 +15,7 @@ import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { ReservationStatus } from 'src/libs/enums/reservation-status.enum';
 import { getAllDatesBetween } from 'src/libs/utils/date.utils';
 import { Repository } from 'typeorm';
+import { CreateManualPaymentDto } from './dto/create-manual-payment.request.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -359,5 +361,35 @@ export class PaymentsService {
     );
 
     return enriched;
+  }
+
+  async createManualPayment(dto: CreateManualPaymentDto) {
+    const reservation = await this.reservationRepo.findOne({
+      where: { _id: new ObjectId(dto.reservation_id) },
+    });
+    if (!reservation) throw new NotFoundException('Reservation not found');
+
+    if (
+      reservation.status === ReservationStatus.COMPLETED ||
+      reservation.status === ReservationStatus.CANCELLED
+    ) {
+      throw new BadRequestException(
+        'Cannot add payment to a cancelled reservation.',
+      );
+    }
+
+    const payment = this.paymentRepo.create({
+      reservation_id: new ObjectId(reservation._id),
+      payment_method: dto.payment_method,
+      amount: dto.amount,
+      payment_status: dto.payment_status ?? PaymentStatus.COMPLETED,
+      receipt_number: dto.receipt_number || null,
+      reference_number: dto.reference_number || null,
+      payment_date: new Date(),
+    } as Partial<Payment>);
+
+    const saved = await this.paymentRepo.save(payment);
+
+    return saved;
   }
 }

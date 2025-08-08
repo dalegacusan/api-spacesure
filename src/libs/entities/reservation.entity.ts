@@ -6,6 +6,7 @@ import {
   ObjectIdColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { ReservationStatus } from '../enums/reservation-status.enum';
 
 @Entity('reservations')
 export class Reservation {
@@ -22,7 +23,7 @@ export class Reservation {
   @Column('decimal', { default: 0 }) tax: number;
   @Column('decimal') total_price: number;
   @Column({ nullable: true }) discount_note?: string;
-  @Column({ default: 'pending' }) status: string;
+  @Column({ default: ReservationStatus.CREATED }) status: ReservationStatus;
   @CreateDateColumn() created_at: Date;
   @UpdateDateColumn() updated_at: Date;
 }

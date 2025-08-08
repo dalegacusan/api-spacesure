@@ -1,8 +1,17 @@
 // src/payments/payments.controller.ts
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { UserRole } from 'src/libs/enums/roles.enum';
+import { CreateManualPaymentDto } from './dto/create-manual-payment.request.dto';
 import { PaymentsService } from './payments.service';
 
 @Controller('payments')
@@ -26,5 +35,11 @@ export class PaymentsController {
   @Roles(UserRole.SUPER_ADMIN)
   async getAllPaymentsWithDetails() {
     return this.paymentsService.getAllWithReservations();
+  }
+
+  @Post()
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  async createManualPayment(@Body() dto: CreateManualPaymentDto) {
+    return this.paymentsService.createManualPayment(dto);
   }
 }

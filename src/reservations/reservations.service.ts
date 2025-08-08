@@ -46,6 +46,9 @@ export class ReservationsService {
       order: { created_at: 'DESC' },
     });
 
+    if (!reservations.length) return [];
+
+    // Collect related IDs
     const vehicleIds = Array.from(
       new Set(reservations.map((r) => r.vehicle_id.toString())),
     ).map((id) => new ObjectId(id));
@@ -54,25 +57,36 @@ export class ReservationsService {
       new Set(reservations.map((r) => r.parking_space_id.toString())),
     ).map((id) => new ObjectId(id));
 
-    const vehicles = await this.vehicleRepo.find({
-      where: {
-        _id: { $in: vehicleIds },
-      } as any,
-    });
+    const reservationIds = reservations.map((r) => r._id);
 
-    const spaces = await this.parkingSpaceRepo.find({
-      where: {
-        _id: { $in: parkingSpaceIds },
-      } as any,
-    });
+    // Fetch related docs
+    const [vehicles, spaces, payments] = await Promise.all([
+      this.vehicleRepo.find({
+        where: { _id: { $in: vehicleIds } } as any,
+      }),
+      this.parkingSpaceRepo.find({
+        where: { _id: { $in: parkingSpaceIds } } as any,
+      }),
+      this.paymentRepo.find({
+        where: { reservation_id: { $in: reservationIds } } as any,
+        order: { payment_date: 'DESC' },
+      }),
+    ]);
 
-    // Map full vehicle record by vehicle_id
+    // Build maps
     const vehicleMap = new Map(vehicles.map((v) => [v._id.toString(), v]));
-
     const spaceMap = new Map(
       spaces.map((s) => [s._id.toString(), s.establishment_name]),
     );
 
+    const paymentMap = new Map<string, Payment[]>();
+    for (const p of payments) {
+      const key = p.reservation_id.toString();
+      if (!paymentMap.has(key)) paymentMap.set(key, []);
+      paymentMap.get(key)!.push(p);
+    }
+
+    // Shape response
     return reservations.map((r) => {
       const start = new Date(r.start_time);
       const end = new Date(r.end_time);
@@ -88,7 +102,7 @@ export class ReservationsService {
       const startDate = start.toISOString().split('T')[0];
       const endDate = end.toISOString().split('T')[0];
 
-      let finalDate =
+      const date =
         startDate === endDate
           ? formatDateToLong(startDate)
           : `${formatDateToLong(startDate)} to ${formatDateToLong(endDate)}`;
@@ -97,11 +111,12 @@ export class ReservationsService {
         id: r._id.toString(),
         establishment: spaceMap.get(r.parking_space_id.toString()) || 'Unknown',
         vehicle: vehicleMap.get(r.vehicle_id.toString()) || null,
-        date: finalDate,
+        date,
         time: timeLabel,
         duration: `${hours} hour${hours !== 1 ? 's' : ''}`,
         amount: `₱${r.total_price.toFixed(2)}`,
         status: r.status,
+        payments: paymentMap.get(r._id.toString()) || [],
       };
     });
   }

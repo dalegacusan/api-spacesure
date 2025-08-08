@@ -319,8 +319,8 @@ export class UsersService {
     }
 
     const assignment = this.parkingSpaceAdminRepo.create({
-      user_id: user._id,
-      parking_space_id: parkingSpace._id,
+      user_id: new ObjectId(user._id),
+      parking_space_id: new ObjectId(parkingSpace._id),
       assigned_by_user_id: new ObjectId(assignedByUserId),
       assigned_at: new Date(),
     });

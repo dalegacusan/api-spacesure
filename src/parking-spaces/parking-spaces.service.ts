@@ -4,6 +4,7 @@ import { ObjectId } from 'mongodb';
 import { CryptoService } from 'src/libs/crypto/crypto.service';
 import { ParkingSpaceAdmin, Reservation, User } from 'src/libs/entities';
 import { ParkingSpace } from 'src/libs/entities/parking-space.entity';
+import { AvailabilityStatus } from 'src/libs/enums/availability-status.enum';
 import { PaymentStatus } from 'src/libs/enums/payment-status.enum';
 import { UserRole } from 'src/libs/enums/roles.enum';
 import { MongoRepository } from 'typeorm';
@@ -407,10 +408,9 @@ export class ParkingSpacesService {
 
   async updateOne(id: string, dto: Partial<ParkingSpace>) {
     if (!id) {
-      throw new BadRequestException('User ID is not found.');
+      throw new BadRequestException('Parking Space ID is required.');
     }
 
-    // TODO - Check if somethings wrong here
     const space = await this.parkingSpaceRepo.findOneBy({
       _id: new ObjectId(id),
       is_deleted: false,
@@ -418,7 +418,35 @@ export class ParkingSpacesService {
 
     if (!space) return null;
 
-    // Edge condition: available_spaces must not exceed total_spaces
+    // Check if we're trying to OPEN the space
+    if (
+      dto.availability_status === AvailabilityStatus.OPEN &&
+      space.availability_status !== AvailabilityStatus.OPEN
+    ) {
+      const adminAssignment = await this.parkingSpaceAdminRepo.findOne({
+        where: {
+          parking_space_id: new ObjectId(id),
+        },
+      });
+
+      if (!adminAssignment) {
+        throw new BadRequestException(
+          'Cannot set status to OPENED: No admin assigned to this parking space.',
+        );
+      }
+
+      // Check if both rates are 0
+      const hourlyRate = dto.hourlyRate ?? space.hourlyRate ?? 0;
+      const wholeDayRate = dto.whole_day_rate ?? space.whole_day_rate ?? 0;
+
+      if (hourlyRate <= 0 || wholeDayRate <= 0) {
+        throw new BadRequestException(
+          'Both hourly rate and whole day rate must be greater than zero.',
+        );
+      }
+    }
+
+    // Prevent available_spaces from exceeding total_spaces
     if (
       dto.available_spaces !== undefined &&
       dto.total_spaces !== undefined &&
