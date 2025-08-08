@@ -363,16 +363,6 @@ export class ReservationsService {
     reservation.updated_at = now;
     await this.reservationRepo.save(reservation);
 
-    const payments = await this.paymentRepo.find({
-      where: { reservation_id: reservation._id },
-    });
-
-    for (const payment of payments) {
-      payment.payment_status = PaymentStatus.FAILED;
-      payment.payment_date = now;
-      await this.paymentRepo.save(payment);
-    }
-
     return {
       message: 'Reservation and associated payments cancelled successfully.',
       reservationId: reservation._id.toString(),

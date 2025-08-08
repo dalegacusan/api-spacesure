@@ -214,7 +214,7 @@ export class PaymentsService {
     }
 
     if (cancel) {
-      payment.payment_status = PaymentStatus.FAILED;
+      payment.payment_status = PaymentStatus.CANCELLED;
       payment.payment_date = new Date();
       await this.paymentRepo.save(payment);
 
@@ -292,7 +292,7 @@ export class PaymentsService {
       payment.payment_date = new Date(mayaTransaction.updatedAt);
       await this.paymentRepo.save(payment);
 
-      reservation.status = ReservationStatus.CANCELLED;
+      reservation.status = ReservationStatus.PAYMENT_FAILED;
       await this.reservationRepo.save(reservation);
     }
 
